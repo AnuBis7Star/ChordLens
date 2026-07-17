@@ -25,6 +25,12 @@ For a local network session, start Vite with `npm run dev -- --host`, then share
 
 For public sharing, expose the Vite server with a HTTPS tunnel or deploy it with the signaling service. The client uses `/signal` for WebSocket signaling and sends MIDI directly between the host and listeners using WebRTC.
 
+## Configuration and privacy
+
+The signaling service listens on port `8787` by default. Set `VITE_SIGNALING_URL` only when it is hosted separately; this browser-visible value must never contain a password, token, or other secret.
+
+Room codes are intended for lightweight live collaboration. Anyone with a code can request access, so do not use them to share sensitive information.
+
 ## Checks
 
 ```bash

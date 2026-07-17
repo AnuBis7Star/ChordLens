@@ -3,4 +3,9 @@ dist/
 .env
 .env.*
 !.env.example
+*.key
+*.pem
+*.p12
+credentials.json
+.npmrc
 .DS_Store
