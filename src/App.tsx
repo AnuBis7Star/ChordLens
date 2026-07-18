@@ -30,13 +30,13 @@ type Preferences = {
   scoreVisible?: boolean
 }
 
-const PREFERENCES_KEY = 'chordlens-midi:preferences'
+const DEFAULT_PREFERENCES_KEY = 'chordlens-midi:preferences'
 const VALID_KEY_SIGNATURES = new Set<string>(KEY_ROOTS.flatMap((key) => [key.major, key.minor]))
 const GrandStaff = lazy(() => import('./components/GrandStaff').then(({ GrandStaff }) => ({ default: GrandStaff })))
 
-function loadPreferences(): Preferences {
+function loadPreferences(preferencesKey: string): Preferences {
   try {
-    const preferences = JSON.parse(window.localStorage.getItem(PREFERENCES_KEY) ?? '{}') as Preferences
+    const preferences = JSON.parse(window.localStorage.getItem(preferencesKey) ?? '{}') as Preferences
     return {
       selectedInputId: typeof preferences.selectedInputId === 'string' ? preferences.selectedInputId : undefined,
       keySignature: VALID_KEY_SIGNATURES.has(preferences.keySignature ?? '') ? preferences.keySignature : undefined,
@@ -62,8 +62,20 @@ function createRoomCode() {
   return crypto.getRandomValues(new Uint32Array(1))[0].toString(36).slice(0, 6).toUpperCase().padEnd(6, '0')
 }
 
-export default function App() {
-  const [preferences] = useState(loadPreferences)
+export type ChordLensProps = {
+  embedded?: boolean
+  homeHref?: string
+  preferencesKey?: string
+  signalingUrl?: string
+}
+
+export default function App({
+  embedded = false,
+  homeHref = '/',
+  preferencesKey = DEFAULT_PREFERENCES_KEY,
+  signalingUrl,
+}: ChordLensProps) {
+  const [preferences] = useState(() => loadPreferences(preferencesKey))
   const [midiAccess, setMidiAccess] = useState<MIDIAccess | null>(null)
   const [midiError, setMidiError] = useState<string | null>(null)
   const [deviceRevision, setDeviceRevision] = useState(0)
@@ -92,11 +104,11 @@ export default function App() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ selectedInputId, keySignature, role, smoothingEnabled, scoreVisible }))
+      window.localStorage.setItem(preferencesKey, JSON.stringify({ selectedInputId, keySignature, role, smoothingEnabled, scoreVisible }))
     } catch {
       // Browser storage can be disabled; the app remains usable for this session.
     }
-  }, [keySignature, role, scoreVisible, selectedInputId, smoothingEnabled])
+  }, [keySignature, preferencesKey, role, scoreVisible, selectedInputId, smoothingEnabled])
 
   useEffect(() => {
     const closeSetupOnOutsideClick = (event: PointerEvent) => {
@@ -216,6 +228,7 @@ export default function App() {
       return
     }
     const room = new LiveRoom({
+      signalingUrl,
       onMidi: (data) => setMidiState((state) => updateMidiState(state, data)),
       onState: setMidiState,
       onStatus: (status, message = '') => { setRoomStatus(status); setRoomMessage(message) },
@@ -231,9 +244,10 @@ export default function App() {
   }
 
   return (
+    <div className={embedded ? 'chordlens-shell is-embedded' : 'chordlens-shell'}>
     <main className="live-app">
       <header className="live-header">
-        <a className="wordmark" href="/" aria-label="ChordLens MIDI home">
+        <a className="wordmark" href={homeHref} aria-label="ChordLens MIDI home">
           ChordLens <span>MIDI</span>
         </a>
 
@@ -297,7 +311,7 @@ export default function App() {
                     ? <button type="button" className="session-button" onClick={() => roomRef.current?.leave()}>Leave</button>
                     : <button type="button" className="session-button" onClick={startRoom}>{roomMode === 'host' ? 'Start' : 'Join'}</button>}
                 </div>
-                <small>{roomStatus === 'hosting' ? 'Share this code. Your MIDI is sent directly to one listener.' : roomStatus === 'joined' ? 'Connected directly to the host.' : roomMessage || 'Host a code, or enter one to watch.'}</small>
+                <small>{roomStatus === 'hosting' ? 'Share this code. Your MIDI is sent directly to listeners.' : roomStatus === 'joined' ? 'Connected directly to the host.' : roomMessage || 'Host a code, or enter one to watch.'}</small>
               </div>
               {midiError && <p className="setup-error">{midiError}</p>}
             </div>
@@ -342,5 +356,6 @@ export default function App() {
         <p>Sustain pedal: <strong>{midiState.sustain ? 'Down' : 'Up'}</strong></p>
       </footer>
     </main>
+    </div>
   )
 }

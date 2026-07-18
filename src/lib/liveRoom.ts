@@ -1,5 +1,3 @@
-/// <reference types="vite/client" />
-
 import type { MidiState } from './midi'
 
 export type RoomMode = 'host' | 'viewer'
@@ -8,6 +6,7 @@ export type RoomStatus = 'offline' | 'connecting' | 'hosting' | 'joined' | 'erro
 type Signal = { type: string; [key: string]: unknown }
 
 type LiveRoomOptions = {
+  signalingUrl?: string
   onMidi: (data: number[]) => void
   onState: (state: MidiState) => void
   onStatus: (status: RoomStatus, message?: string) => void
@@ -57,7 +56,7 @@ export class LiveRoom {
     this.mode = mode
     this.roomCode = roomCode
     this.options.onStatus('connecting')
-    const socket = new WebSocket(import.meta.env.VITE_SIGNALING_URL ?? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/signal`)
+    const socket = new WebSocket(this.options.signalingUrl ?? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/signal`)
     this.socket = socket
 
     await new Promise<void>((resolve, reject) => {
