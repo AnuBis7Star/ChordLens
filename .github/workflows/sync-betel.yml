@@ -20,6 +20,7 @@ jobs:
         with:
           repository: AnuBis7Star/betel-band-planner
           ref: main
+          fetch-depth: 0
           ssh-key: ${{ secrets.BETEL_SYNC_DEPLOY_KEY }}
       - uses: actions/setup-node@v4
         with:
@@ -38,7 +39,7 @@ jobs:
           git add package.json package-lock.json
           git commit -m "chore(chordlens): sync ${{ github.event.workflow_run.head_sha }}"
           git push origin HEAD:main
-          git fetch origin develop
-          git switch develop
+          git fetch origin main develop
+          git switch -C develop origin/develop
           git merge origin/main --no-edit
           git push origin develop
