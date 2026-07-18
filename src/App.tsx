@@ -3,7 +3,9 @@ import { detectChord } from './lib/chords'
 import { EMPTY_MIDI_STATE, updateMidiState } from './lib/midi'
 import { toNotationNotes } from './lib/notation'
 import { getChordSmoothingDelay } from './lib/smoothing'
-import { LiveRoom, type RoomMode, type RoomStatus } from './lib/liveRoom'
+import { LiveRoom, type CreateSignalingConnection, type RoomMode, type RoomStatus } from './lib/liveRoom'
+
+export type { CreateSignalingConnection, Signal, SignalingConnection } from './lib/liveRoom'
 
 const ROLES = ['pianist', 'guitarist', 'bassist'] as const
 const KEY_ROOTS = [
@@ -67,6 +69,7 @@ export type ChordLensProps = {
   homeHref?: string
   preferencesKey?: string
   signalingUrl?: string
+  createSignalingConnection?: CreateSignalingConnection
 }
 
 export default function App({
@@ -74,6 +77,7 @@ export default function App({
   homeHref = '/',
   preferencesKey = DEFAULT_PREFERENCES_KEY,
   signalingUrl,
+  createSignalingConnection,
 }: ChordLensProps) {
   const [preferences] = useState(() => loadPreferences(preferencesKey))
   const [midiAccess, setMidiAccess] = useState<MIDIAccess | null>(null)
@@ -229,6 +233,7 @@ export default function App({
     }
     const room = new LiveRoom({
       signalingUrl,
+      createSignalingConnection,
       onMidi: (data) => setMidiState((state) => updateMidiState(state, data)),
       onState: setMidiState,
       onStatus: (status, message = '') => { setRoomStatus(status); setRoomMessage(message) },
