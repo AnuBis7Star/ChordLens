@@ -1,0 +1,44 @@
+name: Sync Betel production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+concurrency:
+  group: sync-betel-production
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: AnuBis7Star/betel-band-planner
+          ref: main
+          ssh-key: ${{ secrets.BETEL_SYNC_DEPLOY_KEY }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: node scripts/sync-chordlens.mjs "${{ github.event.workflow_run.head_sha }}"
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run build
+      - name: Publish the verified ChordLens release
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "chordlens-sync[bot]"
+          git config user.email "chordlens-sync[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore(chordlens): sync ${{ github.event.workflow_run.head_sha }}"
+          git push origin HEAD:main
+          git fetch origin develop
+          git switch develop
+          git merge origin/main --no-edit
+          git push origin develop
