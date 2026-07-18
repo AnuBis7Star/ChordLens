@@ -31,6 +31,12 @@ The signaling service listens on port `8787` by default. Set `VITE_SIGNALING_URL
 
 Room codes are intended for lightweight live collaboration. Anyone with a code can request access, so do not use them to share sensitive information.
 
+## Betel Band Planner integration
+
+This repository is the source of truth for both the standalone app and the native Betel Band Planner tool. It exports the React application from `chordlens-midi`, the scoped stylesheet from `chordlens-midi/styles.css`, and the reusable WebSocket handler from `chordlens-midi/signaling`.
+
+Feature branches merge into `develop`. A tested release merges `develop` into `main`. After CI passes on `main`, the release workflow pins Betel Band Planner to that exact commit, runs Betel's compatibility checks, updates Betel `main`, and Hostinger redeploys it. Betel does not maintain a second copy of the ChordLens engine.
+
 ## Checks
 
 ```bash
