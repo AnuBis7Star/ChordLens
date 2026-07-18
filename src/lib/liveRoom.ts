@@ -3,10 +3,24 @@ import type { MidiState } from './midi'
 export type RoomMode = 'host' | 'viewer'
 export type RoomStatus = 'offline' | 'connecting' | 'hosting' | 'joined' | 'error'
 
-type Signal = { type: string; [key: string]: unknown }
+export type Signal = { type: string; [key: string]: unknown }
+
+export type SignalingConnection = {
+  send: (signal: Signal) => void
+  close: () => void
+}
+
+export type CreateSignalingConnection = (options: {
+  mode: RoomMode
+  roomCode: string
+  onSignal: (signal: Signal) => void
+  onClose: () => void
+  onError: (error: Error) => void
+}) => Promise<SignalingConnection>
 
 type LiveRoomOptions = {
   signalingUrl?: string
+  createSignalingConnection?: CreateSignalingConnection
   onMidi: (data: number[]) => void
   onState: (state: MidiState) => void
   onStatus: (status: RoomStatus, message?: string) => void
@@ -16,7 +30,7 @@ type LiveRoomOptions = {
 const rtcConfig: RTCConfiguration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
 
 export class LiveRoom {
-  private socket: WebSocket | null = null
+  private signaling: SignalingConnection | null = null
   private peers = new Map<string, RTCPeerConnection>()
   private channels = new Map<string, RTCDataChannel>()
   private roomCode = ''
@@ -43,10 +57,10 @@ export class LiveRoom {
   leave() {
     this.channels.forEach((channel) => channel.close())
     this.peers.forEach((peer) => peer.close())
-    this.socket?.close()
+    this.signaling?.close()
     this.channels.clear()
     this.peers.clear()
-    this.socket = null
+    this.signaling = null
     this.mode = null
     this.options.onStatus('offline')
   }
@@ -56,23 +70,42 @@ export class LiveRoom {
     this.mode = mode
     this.roomCode = roomCode
     this.options.onStatus('connecting')
+    const onClose = () => {
+      if (this.mode === mode) this.options.onStatus('offline')
+    }
+    const onError = (error: Error) => this.options.onStatus('error', error.message)
+
+    try {
+      this.signaling = this.options.createSignalingConnection
+        ? await this.options.createSignalingConnection({ mode, roomCode, onSignal: (signal) => void this.handleSignal(signal), onClose, onError })
+        : await this.createWebSocketConnection(mode, roomCode, onClose)
+    } catch (error) {
+      const connectionError = error instanceof Error ? error : new Error('Could not reach the live-session server.')
+      onError(connectionError)
+      throw connectionError
+    }
+  }
+
+  private async createWebSocketConnection(mode: RoomMode, roomCode: string, onClose: () => void) {
     const socket = new WebSocket(this.options.signalingUrl ?? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/signal`)
-    this.socket = socket
+    socket.onmessage = (event) => void this.handleSignal(JSON.parse(event.data as string) as Signal)
+    socket.onclose = onClose
 
     await new Promise<void>((resolve, reject) => {
-      socket.onopen = () => {
-        socket.send(JSON.stringify({ type: mode, roomCode }))
-        resolve()
-      }
+      socket.onopen = () => resolve()
       socket.onerror = () => reject(new Error('Could not reach the live-session server.'))
     }).catch((error: Error) => {
+      socket.close()
       this.options.onStatus('error', error.message)
       throw error
     })
 
-    socket.onmessage = (event) => this.handleSignal(JSON.parse(event.data as string) as Signal)
-    socket.onclose = () => {
-      if (this.socket === socket) this.options.onStatus('offline')
+    socket.send(JSON.stringify({ type: mode, roomCode }))
+    return {
+      send: (signal: Signal) => {
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ ...signal, roomCode }))
+      },
+      close: () => socket.close(),
     }
   }
 
@@ -140,6 +173,6 @@ export class LiveRoom {
   }
 
   private signal(message: Signal) {
-    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ ...message, roomCode: this.roomCode }))
+    this.signaling?.send({ ...message, roomCode: this.roomCode })
   }
 }
