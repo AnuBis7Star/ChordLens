@@ -35,6 +35,7 @@ type Preferences = {
 }
 
 const DEFAULT_PREFERENCES_KEY = 'chordlens-midi:preferences'
+const DEMO_NOTES = [36, 40, 43] as const
 const VALID_KEY_SIGNATURES = new Set<string>(KEY_ROOTS.flatMap((key) => [key.major, key.minor]))
 const GrandStaff = lazy(() => import('./components/GrandStaff').then(({ GrandStaff }) => ({ default: GrandStaff })))
 
@@ -93,6 +94,7 @@ export default function App({
   const [role, setRole] = useState<Role>(preferences.role ?? 'pianist')
   const [smoothingEnabled, setSmoothingEnabled] = useState(preferences.smoothingEnabled ?? false)
   const [scoreVisible, setScoreVisible] = useState(preferences.scoreVisible ?? true)
+  const [demoPlaying, setDemoPlaying] = useState(false)
   const [hasPlayed, setHasPlayed] = useState(false)
   const [showReadyPrompt, setShowReadyPrompt] = useState(true)
   const [openPicker, setOpenPicker] = useState<Picker>(null)
@@ -173,6 +175,7 @@ export default function App({
 
   useEffect(() => {
     setMidiState(EMPTY_MIDI_STATE)
+    setDemoPlaying(false)
     if (!selectedInput) return
 
     const onMidiMessage = (event: MIDIMessageEvent) => {
@@ -228,6 +231,14 @@ export default function App({
   const chordStyle = { '--mobile-chord-size': mobileChordSize(activeView?.main ?? '') } as CSSProperties
   const roomState = roomStatus === 'hosting' ? 'Running' : roomStatus === 'joined' ? 'Connected' : roomStatus === 'connecting' ? 'Connecting' : roomStatus === 'error' ? 'Error' : 'Disconnected'
   const liveStatus = roomMode === 'host' ? `Host ${roomCode || '------'} · ${roomState}` : `Connected to ${roomCode || '------'} · ${roomState}`
+  const toggleDemoNotes = () => {
+    DEMO_NOTES.forEach((note) => {
+      const data = [demoPlaying ? 0x80 : 0x90, note, demoPlaying ? 0 : 96]
+      setMidiState((state) => updateMidiState(state, data))
+      roomRef.current?.sendMidi(data)
+    })
+    setDemoPlaying(!demoPlaying)
+  }
 
   const startRoom = async () => {
     const code = roomCode.trim().toUpperCase()
@@ -277,6 +288,9 @@ export default function App({
                 <span className="setup-label">MIDI input</span>
                 <button className="setup-trigger" type="button" aria-expanded={openPicker === 'midi'} onClick={() => setOpenPicker(openPicker === 'midi' ? null : 'midi')}>
                   {selectedInput ? deviceName : 'No MIDI devices found'}<span aria-hidden="true">⌄</span>
+                </button>
+                <button className="setup-trigger demo-input" type="button" aria-pressed={demoPlaying} onClick={toggleDemoNotes}>
+                  {demoPlaying ? 'Release test notes' : 'Hold low C chord'}
                 </button>
                 {openPicker === 'midi' && <div className="picker-menu midi-picker" role="listbox" aria-label="MIDI input">
                   {inputs.map((input) => <button key={input.id} type="button" className={input.id === selectedInput?.id ? 'picker-option active' : 'picker-option'} onClick={() => { setSelectedInputId(input.id); setOpenPicker(null) }}>

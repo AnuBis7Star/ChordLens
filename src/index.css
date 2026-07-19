@@ -66,6 +66,8 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
 .setup-trigger { width: 100%; min-height: 58px; padding: 0 17px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #666a62; background: #171a17; color: #f2ede2; cursor: pointer; font-size: 1rem; font-weight: 650; text-align: left; }
 .setup-trigger:hover, .setup-trigger:focus-visible { border-color: #d7ab5a; outline: 3px solid rgb(215 171 90 / 20%); outline-offset: 2px; }
 .setup-trigger > span { color: #b9b7ae; font-size: 1.35rem; }
+.demo-input { min-height: 46px; margin-top: 10px; justify-content: center; }
+.demo-input[aria-pressed="true"] { color: #171814; background: #e5b94c; border-color: #e5b94c; }
 .key-controls { display: grid; grid-template-columns: 160px 1fr; gap: 12px; }
 .key-trigger { min-height: 58px; }
 .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; }
