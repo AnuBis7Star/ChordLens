@@ -33,7 +33,7 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
 .wordmark span { color: #d7ab5a; font-weight: 500; }
 .header-tools { min-width: 0; margin-left: auto; display: flex; align-items: center; gap: 24px; }
 
-.connection-status, .live-footer p, .notation-heading, .reading-label {
+.connection-status, .live-footer p, .reading-label {
   margin: 0;
   color: #b9b7ae;
   font-size: .9rem;
@@ -148,7 +148,6 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
 @scope (.chordlens-shell) {
 
 .notation-panel { justify-self: center; width: min(460px, 100%); min-width: 0; padding: 0; color: #f4eee3; background: transparent; }
-.notation-heading { display: flex; justify-content: space-between; margin: 0 5px 8px; color: #c7c5bd; font-size: .9rem; }
 .grand-staff { width: min(460px, 100%); min-height: 250px; overflow-x: auto; }
 .grand-staff svg { display: block; width: 100%; height: auto; filter: invert(1); }
 

@@ -355,10 +355,6 @@ export default function App({
         </section>
 
         {scoreVisible && <section className="notation-panel" aria-label={`Score in ${keyLabel}`}>
-          <div className="notation-heading">
-            <span>Score</span>
-            <span>{keyLabel}</span>
-          </div>
           <Suspense fallback={<div className="grand-staff" />}>
             <GrandStaff notes={sourceNotes} keySignature={keySignature} />
           </Suspense>
