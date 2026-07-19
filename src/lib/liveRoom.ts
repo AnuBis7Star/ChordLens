@@ -28,6 +28,7 @@ type LiveRoomOptions = {
 }
 
 const rtcConfig: RTCConfiguration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+const RECONNECT_DELAY_MS = 1_000
 
 export class LiveRoom {
   private signaling: SignalingConnection | null = null
@@ -35,14 +36,21 @@ export class LiveRoom {
   private channels = new Map<string, RTCDataChannel>()
   private roomCode = ''
   private mode: RoomMode | null = null
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private reconnectEnabled = false
+  private connectionVersion = 0
 
   constructor(private readonly options: LiveRoomOptions) {}
 
   async host(roomCode: string) {
+    this.leave()
+    this.reconnectEnabled = true
     await this.connect('host', roomCode)
   }
 
   async join(roomCode: string) {
+    this.leave()
+    this.reconnectEnabled = true
     await this.connect('viewer', roomCode)
   }
 
@@ -54,24 +62,43 @@ export class LiveRoom {
     this.send({ type: 'state', state })
   }
 
+  resume() {
+    if (!this.reconnectEnabled || !this.mode) return
+    const mode = this.mode
+    this.connectionVersion += 1
+    this.disconnect()
+    this.options.onStatus('offline')
+    this.scheduleReconnect(mode, this.roomCode)
+  }
+
   leave() {
+    this.reconnectEnabled = false
+    this.cancelReconnect()
+    this.connectionVersion += 1
+    this.disconnect()
+    this.mode = null
+    this.options.onStatus('offline')
+  }
+
+  private disconnect() {
     this.channels.forEach((channel) => channel.close())
     this.peers.forEach((peer) => peer.close())
     this.signaling?.close()
     this.channels.clear()
     this.peers.clear()
     this.signaling = null
-    this.mode = null
-    this.options.onStatus('offline')
   }
 
   private async connect(mode: RoomMode, roomCode: string) {
-    this.leave()
+    const version = ++this.connectionVersion
+    this.disconnect()
     this.mode = mode
     this.roomCode = roomCode
     this.options.onStatus('connecting')
     const onClose = () => {
-      if (this.mode === mode) this.options.onStatus('offline')
+      if (this.connectionVersion !== version || this.mode !== mode) return
+      this.options.onStatus('offline')
+      this.scheduleReconnect(mode, roomCode)
     }
     const onError = (error: Error) => this.options.onStatus('error', error.message)
 
@@ -82,8 +109,22 @@ export class LiveRoom {
     } catch (error) {
       const connectionError = error instanceof Error ? error : new Error('Could not reach the live-session server.')
       onError(connectionError)
+      this.scheduleReconnect(mode, roomCode)
       throw connectionError
     }
+  }
+
+  private scheduleReconnect(mode: RoomMode, roomCode: string) {
+    if (!this.reconnectEnabled || this.reconnectTimer || this.mode !== mode) return
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      if (this.reconnectEnabled && this.mode === mode) void this.connect(mode, roomCode).catch(() => {})
+    }, RECONNECT_DELAY_MS)
+  }
+
+  private cancelReconnect() {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = null
   }
 
   private async createWebSocketConnection(mode: RoomMode, roomCode: string, onClose: () => void) {
@@ -157,7 +198,10 @@ export class LiveRoom {
   }
 
   private bindChannel(channel: RTCDataChannel) {
+    const version = this.connectionVersion
     channel.onopen = () => {
+      if (this.connectionVersion !== version) return
+      this.cancelReconnect()
       this.options.onStatus(this.mode === 'host' ? 'hosting' : 'joined')
       this.options.onPeerConnected()
     }
@@ -166,7 +210,11 @@ export class LiveRoom {
       if (message.type === 'midi' && Array.isArray(message.data)) this.options.onMidi(message.data)
       if (message.type === 'state' && message.state) this.options.onState(message.state)
     }
-    channel.onclose = () => { if (this.mode === 'viewer') this.options.onStatus('offline') }
+    channel.onclose = () => {
+      if (this.connectionVersion !== version || this.mode !== 'viewer') return
+      this.options.onStatus('offline')
+      this.scheduleReconnect('viewer', this.roomCode)
+    }
   }
 
   private send(message: object) {
