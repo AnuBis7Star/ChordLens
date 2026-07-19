@@ -116,7 +116,7 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
 .performance.score-hidden { grid-template-columns: 1fr; }
 .score-hidden .chord-readout { width: min(720px, 100%); justify-self: center; }
 
-.chord-readout { min-width: 0; background: transparent; }
+.chord-readout { align-self: start; min-width: 0; background: transparent; }
 .role-switcher { display: flex; align-items: center; gap: clamp(20px, 3vw, 42px); margin-bottom: clamp(58px, 11vh, 132px); }
 .role-switcher button { position: relative; padding: 0 0 10px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: #a9a9a1; cursor: pointer; font-size: clamp(1rem, 1.35vw, 1.15rem); font-weight: 600; letter-spacing: .015em; text-transform: capitalize; }
 .role-switcher button:hover, .role-switcher button:focus-visible { color: #f2ede2; outline: none; }
