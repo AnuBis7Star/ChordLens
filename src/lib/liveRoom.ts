@@ -2,6 +2,7 @@ import type { MidiState } from './midi'
 
 export type RoomMode = 'host' | 'viewer'
 export type RoomStatus = 'offline' | 'connecting' | 'hosting' | 'joined' | 'error'
+export type RoomContext = { keySignature?: string; activeSongId?: string | null }
 
 export type Signal = { type: string; [key: string]: unknown }
 
@@ -23,6 +24,7 @@ type LiveRoomOptions = {
   createSignalingConnection?: CreateSignalingConnection
   onMidi: (data: number[]) => void
   onState: (state: MidiState) => void
+  onContext?: (context: RoomContext) => void
   onStatus: (status: RoomStatus, message?: string) => void
   onPeerConnected: () => void
 }
@@ -60,6 +62,10 @@ export class LiveRoom {
 
   sendState(state: MidiState) {
     this.send({ type: 'state', state })
+  }
+
+  sendContext(context: RoomContext) {
+    this.send({ type: 'context', context })
   }
 
   resume() {
@@ -206,9 +212,10 @@ export class LiveRoom {
       this.options.onPeerConnected()
     }
     channel.onmessage = (event) => {
-      const message = JSON.parse(event.data as string) as { type: string; data?: number[]; state?: MidiState }
+      const message = JSON.parse(event.data as string) as { type: string; data?: number[]; state?: MidiState; context?: RoomContext }
       if (message.type === 'midi' && Array.isArray(message.data)) this.options.onMidi(message.data)
       if (message.type === 'state' && message.state) this.options.onState(message.state)
+      if (message.type === 'context' && message.context && typeof message.context === 'object') this.options.onContext?.(message.context)
     }
     channel.onclose = () => {
       if (this.connectionVersion !== version || this.mode !== 'viewer') return

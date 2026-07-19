@@ -3,9 +3,9 @@ import { detectChord } from './lib/chords'
 import { EMPTY_MIDI_STATE, updateMidiState } from './lib/midi'
 import { toNotationNotes } from './lib/notation'
 import { getChordSmoothingDelay } from './lib/smoothing'
-import { LiveRoom, type CreateSignalingConnection, type RoomMode, type RoomStatus } from './lib/liveRoom'
+import { LiveRoom, type CreateSignalingConnection, type RoomContext, type RoomMode, type RoomStatus } from './lib/liveRoom'
 
-export type { CreateSignalingConnection, Signal, SignalingConnection } from './lib/liveRoom'
+export type { CreateSignalingConnection, RoomContext, Signal, SignalingConnection } from './lib/liveRoom'
 
 const ROLES = ['pianist', 'guitarist', 'bassist'] as const
 const KEY_ROOTS = [
@@ -23,6 +23,8 @@ const KEY_ROOTS = [
   { label: 'B', major: 'B', minor: 'Bm' },
 ] as const
 type Role = (typeof ROLES)[number]
+type KeyRoot = (typeof KEY_ROOTS)[number]
+export type ChordLensKeySignature = KeyRoot['major'] | KeyRoot['minor']
 type Picker = 'midi' | 'key' | null
 type Preferences = {
   selectedInputId?: string
@@ -32,11 +34,14 @@ type Preferences = {
   scoreVisible?: boolean
   roomMode?: RoomMode
   roomCode?: string
+  followHostKey?: boolean
+  shareCurrentSong?: boolean
+  followHostSong?: boolean
 }
 
 const DEFAULT_PREFERENCES_KEY = 'chordlens-midi:preferences'
 const DEMO_NOTES = [36, 40, 43] as const
-const VALID_KEY_SIGNATURES = new Set<string>(KEY_ROOTS.flatMap((key) => [key.major, key.minor]))
+const VALID_KEY_SIGNATURES = new Set<ChordLensKeySignature>(KEY_ROOTS.flatMap((key) => [key.major, key.minor]))
 const GrandStaff = lazy(() => import('./components/GrandStaff').then(({ GrandStaff }) => ({ default: GrandStaff })))
 
 function loadPreferences(preferencesKey: string): Preferences {
@@ -44,12 +49,15 @@ function loadPreferences(preferencesKey: string): Preferences {
     const preferences = JSON.parse(window.localStorage.getItem(preferencesKey) ?? '{}') as Preferences
     return {
       selectedInputId: typeof preferences.selectedInputId === 'string' ? preferences.selectedInputId : undefined,
-      keySignature: VALID_KEY_SIGNATURES.has(preferences.keySignature ?? '') ? preferences.keySignature : undefined,
+      keySignature: VALID_KEY_SIGNATURES.has(preferences.keySignature as ChordLensKeySignature) ? preferences.keySignature : undefined,
       role: ROLES.includes(preferences.role as Role) ? preferences.role : undefined,
       smoothingEnabled: typeof preferences.smoothingEnabled === 'boolean' ? preferences.smoothingEnabled : undefined,
       scoreVisible: typeof preferences.scoreVisible === 'boolean' ? preferences.scoreVisible : undefined,
       roomMode: preferences.roomMode === 'host' || preferences.roomMode === 'viewer' ? preferences.roomMode : undefined,
       roomCode: /^[A-Z0-9]{6}$/.test(preferences.roomCode ?? '') ? preferences.roomCode : undefined,
+      followHostKey: typeof preferences.followHostKey === 'boolean' ? preferences.followHostKey : undefined,
+      shareCurrentSong: typeof preferences.shareCurrentSong === 'boolean' ? preferences.shareCurrentSong : undefined,
+      followHostSong: typeof preferences.followHostSong === 'boolean' ? preferences.followHostSong : undefined,
     }
   } catch {
     return {}
@@ -69,13 +77,20 @@ function createRoomCode() {
   return crypto.getRandomValues(new Uint32Array(1))[0].toString(36).slice(0, 6).toUpperCase().padEnd(6, '0')
 }
 
-export type ChordLensProps = {
+type ChordLensBaseProps = {
   embedded?: boolean
   homeHref?: string
   preferencesKey?: string
   signalingUrl?: string
   createSignalingConnection?: CreateSignalingConnection
+  activeSongId?: string | null
+  onActiveSongIdChange?: (songId: string) => void
 }
+
+export type ChordLensProps = ChordLensBaseProps & (
+  | { keySignature?: undefined; onKeySignatureChange?: undefined }
+  | { keySignature: ChordLensKeySignature; onKeySignatureChange: (keySignature: ChordLensKeySignature) => void }
+)
 
 export default function App({
   embedded = false,
@@ -83,6 +98,10 @@ export default function App({
   preferencesKey = DEFAULT_PREFERENCES_KEY,
   signalingUrl,
   createSignalingConnection,
+  keySignature: controlledKeySignature,
+  onKeySignatureChange,
+  activeSongId,
+  onActiveSongIdChange,
 }: ChordLensProps) {
   const [preferences] = useState(() => loadPreferences(preferencesKey))
   const [midiAccess, setMidiAccess] = useState<MIDIAccess | null>(null)
@@ -90,7 +109,8 @@ export default function App({
   const [deviceRevision, setDeviceRevision] = useState(0)
   const [selectedInputId, setSelectedInputId] = useState(preferences.selectedInputId ?? '')
   const [midiState, setMidiState] = useState(EMPTY_MIDI_STATE)
-  const [keySignature, setKeySignature] = useState(preferences.keySignature ?? 'C')
+  const [localKeySignature, setLocalKeySignature] = useState<ChordLensKeySignature>((preferences.keySignature as ChordLensKeySignature) ?? 'C')
+  const keySignature = controlledKeySignature ?? localKeySignature
   const [role, setRole] = useState<Role>(preferences.role ?? 'pianist')
   const [smoothingEnabled, setSmoothingEnabled] = useState(preferences.smoothingEnabled ?? false)
   const [scoreVisible, setScoreVisible] = useState(preferences.scoreVisible ?? true)
@@ -102,9 +122,20 @@ export default function App({
   const [roomCode, setRoomCode] = useState(preferences.roomCode ?? createRoomCode)
   const [roomStatus, setRoomStatus] = useState<RoomStatus>('offline')
   const [roomMessage, setRoomMessage] = useState('')
+  const [followHostKey, setFollowHostKey] = useState(preferences.followHostKey ?? false)
+  const [shareCurrentSong, setShareCurrentSong] = useState(preferences.shareCurrentSong ?? false)
+  const [followHostSong, setFollowHostSong] = useState(preferences.followHostSong ?? false)
   const setupRef = useRef<HTMLDetailsElement>(null)
   const roomRef = useRef<LiveRoom | null>(null)
   const midiStateRef = useRef(EMPTY_MIDI_STATE)
+  const contextRef = useRef({ keySignature, activeSongId, followHostKey, shareCurrentSong, followHostSong, onKeySignatureChange, onActiveSongIdChange })
+
+  contextRef.current = { keySignature, activeSongId, followHostKey, shareCurrentSong, followHostSong, onKeySignatureChange, onActiveSongIdChange }
+
+  const changeKeySignature = (nextKeySignature: ChordLensKeySignature) => {
+    if (onKeySignatureChange) onKeySignatureChange(nextKeySignature)
+    else setLocalKeySignature(nextKeySignature)
+  }
 
   useEffect(() => {
     midiStateRef.current = midiState
@@ -128,11 +159,27 @@ export default function App({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(preferencesKey, JSON.stringify({ selectedInputId, keySignature, role, smoothingEnabled, scoreVisible, roomMode, roomCode }))
+      window.localStorage.setItem(preferencesKey, JSON.stringify({
+        selectedInputId,
+        keySignature: controlledKeySignature === undefined ? keySignature : preferences.keySignature,
+        role,
+        smoothingEnabled,
+        scoreVisible,
+        roomMode,
+        roomCode,
+        followHostKey,
+        shareCurrentSong,
+        followHostSong,
+      }))
     } catch {
       // Browser storage can be disabled; the app remains usable for this session.
     }
-  }, [keySignature, preferencesKey, role, roomCode, roomMode, scoreVisible, selectedInputId, smoothingEnabled])
+  }, [controlledKeySignature, followHostKey, followHostSong, keySignature, preferences.keySignature, preferencesKey, role, roomCode, roomMode, scoreVisible, selectedInputId, shareCurrentSong, smoothingEnabled])
+
+  useEffect(() => {
+    if (roomMode !== 'host') return
+    roomRef.current?.sendContext({ keySignature, activeSongId: shareCurrentSong ? activeSongId : undefined })
+  }, [activeSongId, keySignature, roomMode, shareCurrentSong])
 
   useEffect(() => {
     const closeSetupOnOutsideClick = (event: PointerEvent) => {
@@ -266,8 +313,21 @@ export default function App({
       createSignalingConnection,
       onMidi: (data) => setMidiState((state) => updateMidiState(state, data)),
       onState: setMidiState,
+      onContext: (context: RoomContext) => {
+        const current = contextRef.current
+        if (current.followHostKey && VALID_KEY_SIGNATURES.has(context.keySignature as ChordLensKeySignature)) {
+          if (current.onKeySignatureChange) current.onKeySignatureChange(context.keySignature as ChordLensKeySignature)
+          else setLocalKeySignature(context.keySignature as ChordLensKeySignature)
+        }
+        if (current.followHostSong && typeof context.activeSongId === 'string') current.onActiveSongIdChange?.(context.activeSongId)
+      },
       onStatus: (status, message = '') => { setRoomStatus(status); setRoomMessage(message) },
-      onPeerConnected: () => room.sendState(midiStateRef.current),
+      onPeerConnected: () => {
+        room.sendState(midiStateRef.current)
+        if (roomMode !== 'host') return
+        const current = contextRef.current
+        room.sendContext({ keySignature: current.keySignature, activeSongId: current.shareCurrentSong ? current.activeSongId : undefined })
+      },
     })
     roomRef.current = room
     try {
@@ -321,15 +381,15 @@ export default function App({
                     </button>
                     {openPicker === 'key' && <div className="picker-menu key-menu" role="listbox" aria-label="Notation key">
                       <div className="key-grid">
-                        {KEY_ROOTS.map((key) => <button key={key.label} type="button" className={key.label === selectedKeyRoot.label ? 'key-option active' : 'key-option'} onClick={() => { setKeySignature(isMinorKey ? key.minor : key.major); setOpenPicker(null) }}>
+                        {KEY_ROOTS.map((key) => <button key={key.label} type="button" className={key.label === selectedKeyRoot.label ? 'key-option active' : 'key-option'} onClick={() => { changeKeySignature(isMinorKey ? key.minor : key.major); setOpenPicker(null) }}>
                           {key.label}
                         </button>)}
                       </div>
                     </div>}
                   </div>
                   <div className="mode-tabs" role="tablist" aria-label="Key mode">
-                    <button type="button" role="tab" aria-selected={!isMinorKey} className={!isMinorKey ? 'active' : ''} onClick={() => { setKeySignature(selectedKeyRoot.major); setOpenPicker(null) }}>Major</button>
-                    <button type="button" role="tab" aria-selected={isMinorKey} className={isMinorKey ? 'active' : ''} onClick={() => { setKeySignature(selectedKeyRoot.minor); setOpenPicker(null) }}>Minor</button>
+                    <button type="button" role="tab" aria-selected={!isMinorKey} className={!isMinorKey ? 'active' : ''} onClick={() => { changeKeySignature(selectedKeyRoot.major); setOpenPicker(null) }}>Major</button>
+                    <button type="button" role="tab" aria-selected={isMinorKey} className={isMinorKey ? 'active' : ''} onClick={() => { changeKeySignature(selectedKeyRoot.minor); setOpenPicker(null) }}>Minor</button>
                   </div>
                 </div>
               </div>
@@ -353,6 +413,18 @@ export default function App({
                     ? <button type="button" className="session-button" onClick={() => roomRef.current?.leave()}>Leave</button>
                     : <button type="button" className="session-button" onClick={startRoom}>{roomMode === 'host' ? 'Start' : 'Join'}</button>}
                 </div>
+                {roomMode === 'host' && activeSongId !== undefined ? <label className="toggle-control" htmlFor="share-current-song">
+                  <span>Share current song<small>{shareCurrentSong ? 'On · sends the active song only' : 'Off · song changes stay local'}</small></span>
+                  <input id="share-current-song" type="checkbox" checked={shareCurrentSong} onChange={(event) => setShareCurrentSong(event.target.checked)} />
+                </label> : null}
+                {roomMode === 'viewer' ? <label className="toggle-control" htmlFor="follow-host-key">
+                  <span>Follow host key<small>{followHostKey ? 'On · notation follows the host' : 'Off · use this device key'}</small></span>
+                  <input id="follow-host-key" type="checkbox" checked={followHostKey} onChange={(event) => setFollowHostKey(event.target.checked)} />
+                </label> : null}
+                {roomMode === 'viewer' && onActiveSongIdChange ? <label className="toggle-control" htmlFor="follow-host-song">
+                  <span>Follow host song<small>{followHostSong ? 'On · opens the host active song' : 'Off · navigation stays local'}</small></span>
+                  <input id="follow-host-song" type="checkbox" checked={followHostSong} onChange={(event) => setFollowHostSong(event.target.checked)} />
+                </label> : null}
                 <small>{roomStatus === 'hosting' ? 'Share this code. Your MIDI is sent directly to listeners.' : roomStatus === 'joined' ? 'Connected directly to the host.' : roomMessage || 'Host a code, or enter one to watch.'}</small>
               </div>
               {midiError && <p className="setup-error">{midiError}</p>}

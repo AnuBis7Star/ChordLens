@@ -2,6 +2,15 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { LiveRoom, type CreateSignalingConnection } from './liveRoom'
 
+function bindFakeChannel(room: LiveRoom) {
+  const send = vi.fn()
+  const channel = { readyState: 'open', send, close: vi.fn() } as unknown as RTCDataChannel
+  const internals = room as unknown as { bindChannel: (channel: RTCDataChannel) => void; channels: Map<string, RTCDataChannel> }
+  internals.channels.set('peer-1', channel)
+  internals.bindChannel(channel)
+  return { channel, send }
+}
+
 describe('LiveRoom signaling transport', () => {
   it('uses a host-provided signaling connection', async () => {
     const statuses: string[] = []
@@ -67,5 +76,23 @@ describe('LiveRoom signaling transport', () => {
       room.leave()
       vi.useRealTimers()
     }
+  })
+
+  it('sends and receives key and active-song context without changing MIDI messages', () => {
+    const onContext = vi.fn()
+    const room = new LiveRoom({
+      onMidi: vi.fn(),
+      onState: vi.fn(),
+      onContext,
+      onStatus: vi.fn(),
+      onPeerConnected: vi.fn(),
+    })
+    const { channel, send } = bindFakeChannel(room)
+
+    room.sendContext({ keySignature: 'Db', activeSongId: 'song-1' })
+    expect(send).toHaveBeenCalledWith(JSON.stringify({ type: 'context', context: { keySignature: 'Db', activeSongId: 'song-1' } }))
+
+    channel.onmessage?.({ data: JSON.stringify({ type: 'context', context: { keySignature: 'Ebm', activeSongId: 'song-2' } }) } as MessageEvent)
+    expect(onContext).toHaveBeenCalledWith({ keySignature: 'Ebm', activeSongId: 'song-2' })
   })
 })
