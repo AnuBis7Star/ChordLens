@@ -113,6 +113,20 @@ export default function App({
   useEffect(() => () => roomRef.current?.leave(), [])
 
   useEffect(() => {
+    const resumeRoom = () => {
+      if (document.visibilityState === 'visible') roomRef.current?.resume()
+    }
+    document.addEventListener('visibilitychange', resumeRoom)
+    window.addEventListener('pageshow', resumeRoom)
+    window.addEventListener('online', resumeRoom)
+    return () => {
+      document.removeEventListener('visibilitychange', resumeRoom)
+      window.removeEventListener('pageshow', resumeRoom)
+      window.removeEventListener('online', resumeRoom)
+    }
+  }, [])
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(preferencesKey, JSON.stringify({ selectedInputId, keySignature, role, smoothingEnabled, scoreVisible, roomMode, roomCode }))
     } catch {

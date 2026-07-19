@@ -27,4 +27,45 @@ describe('LiveRoom signaling transport', () => {
     room.leave()
     expect(close).toHaveBeenCalledOnce()
   })
+
+  it('rejoins after the signaling connection closes', async () => {
+    vi.useFakeTimers()
+    const statuses: string[] = []
+    const onCloses: Array<() => void> = []
+    const createSignalingConnection: CreateSignalingConnection = vi.fn(async ({ onSignal, onClose }) => {
+      onCloses.push(onClose)
+      queueMicrotask(() => onSignal({ type: 'hosted' }))
+      return { send: vi.fn(), close: vi.fn() }
+    })
+    const room = new LiveRoom({
+      createSignalingConnection,
+      onMidi: vi.fn(),
+      onState: vi.fn(),
+      onStatus: (status) => statuses.push(status),
+      onPeerConnected: vi.fn(),
+    })
+
+    try {
+      await room.host('ABC123')
+      await vi.runAllTicks()
+      onCloses[0]()
+      expect(statuses.at(-1)).toBe('offline')
+
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(createSignalingConnection).toHaveBeenCalledTimes(2)
+      expect(statuses.slice(-2)).toEqual(['connecting', 'hosting'])
+
+      room.resume()
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(createSignalingConnection).toHaveBeenCalledTimes(3)
+
+      room.leave()
+      onCloses[2]()
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(createSignalingConnection).toHaveBeenCalledTimes(3)
+    } finally {
+      room.leave()
+      vi.useRealTimers()
+    }
+  })
 })
