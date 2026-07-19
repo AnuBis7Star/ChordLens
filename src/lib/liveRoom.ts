@@ -166,6 +166,7 @@ export class LiveRoom {
       if (message.type === 'midi' && Array.isArray(message.data)) this.options.onMidi(message.data)
       if (message.type === 'state' && message.state) this.options.onState(message.state)
     }
+    channel.onclose = () => { if (this.mode === 'viewer') this.options.onStatus('offline') }
   }
 
   private send(message: object) {
