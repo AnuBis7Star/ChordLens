@@ -102,6 +102,7 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
 .session-controls { display: grid; grid-template-columns: 1fr 100px; gap: 10px; margin-top: 10px; }
 .session-controls input { min-width: 0; padding: 0 12px; border: 1px solid #666a62; border-radius: 0; background: #171a17; color: #f2ede2; font: inherit; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .live-session small { display: block; margin-top: 9px; color: #aaa9a1; font-size: .8rem; line-height: 1.35; }
+.live-session .toggle-control { margin-top: 14px; }
 
 .performance {
   flex: 1;
