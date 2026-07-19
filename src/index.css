@@ -150,8 +150,8 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
 @scope (.chordlens-shell) {
 
 .notation-panel { justify-self: center; width: min(460px, 100%); min-width: 0; padding: 0; color: #f4eee3; background: transparent; }
-.grand-staff { width: min(460px, 100%); min-height: 250px; overflow-x: auto; }
-.grand-staff svg { display: block; width: 100%; height: auto; filter: invert(1); }
+.grand-staff { width: min(460px, 100%); min-height: 250px; overflow: visible; }
+.grand-staff svg { display: block; width: 100%; height: auto; overflow: visible; filter: invert(1); }
 
 .live-footer { padding-top: 18px; border-top: 1px solid #3d403c; }
 .live-footer p { letter-spacing: .025em; text-transform: none; }
