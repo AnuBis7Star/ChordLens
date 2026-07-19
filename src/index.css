@@ -28,10 +28,10 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
   gap: 24px;
 }
 
-.live-header { padding-bottom: 22px; border-bottom: 1px solid #3d403c; }
+.live-header { flex-wrap: wrap; padding-bottom: 22px; border-bottom: 1px solid #3d403c; }
 .wordmark { color: inherit; text-decoration: none; font-size: clamp(1.55rem, 2.25vw, 2.15rem); font-weight: 600; letter-spacing: -.055em; }
 .wordmark span { color: #d7ab5a; font-weight: 500; }
-.header-tools { display: flex; align-items: center; gap: 24px; }
+.header-tools { min-width: 0; margin-left: auto; display: flex; align-items: center; gap: 24px; }
 
 .connection-status, .live-footer p, .notation-heading, .reading-label {
   margin: 0;
@@ -42,7 +42,7 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
   text-transform: uppercase;
 }
 
-.connection-status { display: flex; align-items: center; gap: 8px; letter-spacing: .025em; text-transform: none; }
+.connection-status { min-width: 0; display: flex; align-items: center; gap: 8px; letter-spacing: .025em; text-transform: none; }
 .status-mark { width: 7px; height: 7px; border-radius: 50%; background: #676b64; }
 .status-mark.connected { background: #d7ab5a; }
 
@@ -114,7 +114,7 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
 .performance.score-hidden { grid-template-columns: 1fr; }
 .score-hidden .chord-readout { width: min(720px, 100%); justify-self: center; }
 
-.chord-readout { min-width: 0; }
+.chord-readout { min-width: 0; background: transparent; }
 .role-switcher { display: flex; align-items: center; gap: clamp(20px, 3vw, 42px); margin-bottom: clamp(58px, 11vh, 132px); }
 .role-switcher button { position: relative; padding: 0 0 10px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: #a9a9a1; cursor: pointer; font-size: clamp(1rem, 1.35vw, 1.15rem); font-weight: 600; letter-spacing: .015em; text-transform: capitalize; }
 .role-switcher button:hover, .role-switcher button:focus-visible { color: #f2ede2; outline: none; }
@@ -163,7 +163,7 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
 @media (max-width: 820px) {
   .live-app { width: min(100% - 32px, 680px); padding-top: 20px; }
   .header-tools { gap: 16px; }
-  .connection-status { display: none; }
+  .connection-status { font-size: .8rem; }
   .performance { grid-template-columns: 1fr; gap: 32px; align-items: start; padding: 32px 0 48px; }
   .notation-panel { order: -1; justify-self: stretch; width: 100%; }
   .grand-staff { width: 100%; min-height: 220px; }
@@ -181,6 +181,7 @@ html.chordlens-standalone body { min-width: 320px; margin: 0; background: #12141
 @media (max-width: 480px) {
   .live-header { padding-bottom: 16px; }
   .wordmark { font-size: 1.35rem; }
+  .header-tools { width: 100%; justify-content: space-between; }
   .setup-panel { right: -4px; width: calc(100vw - 32px); padding: 24px; }
   .key-controls { grid-template-columns: 1fr; }
   .key-menu { min-width: 0; }

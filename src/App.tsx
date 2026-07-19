@@ -226,7 +226,7 @@ export default function App({
   const deviceName = selectedInput?.name ?? 'No MIDI device'
   const chordLengthClass = (activeView?.main.length ?? 0) > 9 ? 'is-long' : ''
   const chordStyle = { '--mobile-chord-size': mobileChordSize(activeView?.main ?? '') } as CSSProperties
-  const roomState = roomStatus === 'hosting' ? 'Running' : roomStatus === 'joined' ? 'Connected' : roomStatus === 'connecting' ? 'Connecting' : roomStatus === 'error' ? roomMessage || 'Error' : 'Disconnected'
+  const roomState = roomStatus === 'hosting' ? 'Running' : roomStatus === 'joined' ? 'Connected' : roomStatus === 'connecting' ? 'Connecting' : roomStatus === 'error' ? 'Error' : 'Disconnected'
   const liveStatus = roomMode === 'host' ? `Host ${roomCode || '------'} · ${roomState}` : `Connected to ${roomCode || '------'} · ${roomState}`
 
   const startRoom = async () => {
