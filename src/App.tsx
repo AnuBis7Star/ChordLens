@@ -30,6 +30,8 @@ type Preferences = {
   role?: Role
   smoothingEnabled?: boolean
   scoreVisible?: boolean
+  roomMode?: RoomMode
+  roomCode?: string
 }
 
 const DEFAULT_PREFERENCES_KEY = 'chordlens-midi:preferences'
@@ -45,6 +47,8 @@ function loadPreferences(preferencesKey: string): Preferences {
       role: ROLES.includes(preferences.role as Role) ? preferences.role : undefined,
       smoothingEnabled: typeof preferences.smoothingEnabled === 'boolean' ? preferences.smoothingEnabled : undefined,
       scoreVisible: typeof preferences.scoreVisible === 'boolean' ? preferences.scoreVisible : undefined,
+      roomMode: preferences.roomMode === 'host' || preferences.roomMode === 'viewer' ? preferences.roomMode : undefined,
+      roomCode: /^[A-Z0-9]{6}$/.test(preferences.roomCode ?? '') ? preferences.roomCode : undefined,
     }
   } catch {
     return {}
@@ -92,8 +96,8 @@ export default function App({
   const [hasPlayed, setHasPlayed] = useState(false)
   const [showReadyPrompt, setShowReadyPrompt] = useState(true)
   const [openPicker, setOpenPicker] = useState<Picker>(null)
-  const [roomMode, setRoomMode] = useState<RoomMode>('host')
-  const [roomCode, setRoomCode] = useState(createRoomCode)
+  const [roomMode, setRoomMode] = useState<RoomMode>(preferences.roomMode ?? 'host')
+  const [roomCode, setRoomCode] = useState(preferences.roomCode ?? createRoomCode)
   const [roomStatus, setRoomStatus] = useState<RoomStatus>('offline')
   const [roomMessage, setRoomMessage] = useState('')
   const setupRef = useRef<HTMLDetailsElement>(null)
@@ -108,11 +112,11 @@ export default function App({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(preferencesKey, JSON.stringify({ selectedInputId, keySignature, role, smoothingEnabled, scoreVisible }))
+      window.localStorage.setItem(preferencesKey, JSON.stringify({ selectedInputId, keySignature, role, smoothingEnabled, scoreVisible, roomMode, roomCode }))
     } catch {
       // Browser storage can be disabled; the app remains usable for this session.
     }
-  }, [keySignature, preferencesKey, role, scoreVisible, selectedInputId, smoothingEnabled])
+  }, [keySignature, preferencesKey, role, roomCode, roomMode, scoreVisible, selectedInputId, smoothingEnabled])
 
   useEffect(() => {
     const closeSetupOnOutsideClick = (event: PointerEvent) => {
@@ -222,7 +226,8 @@ export default function App({
   const deviceName = selectedInput?.name ?? 'No MIDI device'
   const chordLengthClass = (activeView?.main.length ?? 0) > 9 ? 'is-long' : ''
   const chordStyle = { '--mobile-chord-size': mobileChordSize(activeView?.main ?? '') } as CSSProperties
-  const liveStatus = roomStatus === 'hosting' ? 'Hosting live session' : roomStatus === 'joined' ? 'Watching live session' : roomStatus === 'connecting' ? 'Connecting live session' : selectedInput ? `Listening to ${deviceName}` : 'MIDI not connected'
+  const roomState = roomStatus === 'hosting' ? 'Running' : roomStatus === 'joined' ? 'Connected' : roomStatus === 'connecting' ? 'Connecting' : roomStatus === 'error' ? roomMessage || 'Error' : 'Disconnected'
+  const liveStatus = roomMode === 'host' ? `Host ${roomCode || '------'} · ${roomState}` : `Connected to ${roomCode || '------'} · ${roomState}`
 
   const startRoom = async () => {
     const code = roomCode.trim().toUpperCase()
@@ -258,7 +263,7 @@ export default function App({
 
         <div className="header-tools">
           <p className="connection-status" aria-live="polite">
-            <span className={selectedInput ? 'status-mark connected' : 'status-mark'} />
+            <span className={roomStatus === 'hosting' || roomStatus === 'joined' ? 'status-mark connected' : 'status-mark'} />
             {liveStatus}
           </p>
           <details ref={setupRef} className="setup">
