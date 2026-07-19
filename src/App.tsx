@@ -267,7 +267,11 @@ export default function App({
             {liveStatus}
           </p>
           <details ref={setupRef} className="setup">
-            <summary>Setup</summary>
+            <summary onClick={(event) => {
+              event.preventDefault()
+              if (setupRef.current) setupRef.current.open = !setupRef.current.open
+              if (!setupRef.current?.open) setOpenPicker(null)
+            }}>Setup</summary>
             <div className="setup-panel">
               <div className="setup-field">
                 <span className="setup-label">MIDI input</span>
