@@ -36,6 +36,7 @@ export class LiveRoom {
   private signaling: SignalingConnection | null = null
   private peers = new Map<string, RTCPeerConnection>()
   private channels = new Map<string, RTCDataChannel>()
+  private pendingCandidates = new Map<string, RTCIceCandidateInit[]>()
   private roomCode = ''
   private mode: RoomMode | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -92,6 +93,7 @@ export class LiveRoom {
     this.signaling?.close()
     this.channels.clear()
     this.peers.clear()
+    this.pendingCandidates.clear()
     this.signaling = null
   }
 
@@ -178,17 +180,33 @@ export class LiveRoom {
     if (signal.type === 'offer' && this.mode === 'viewer' && typeof signal.from === 'string') {
       const peer = this.createPeer(signal.from)
       await peer.setRemoteDescription(signal.sdp as RTCSessionDescriptionInit)
+      await this.flushCandidates(signal.from, peer)
       await peer.setLocalDescription(await peer.createAnswer())
       this.signal({ type: 'answer', to: signal.from, sdp: peer.localDescription })
       return
     }
     if (signal.type === 'answer' && typeof signal.from === 'string') {
-      await this.peers.get(signal.from)?.setRemoteDescription(signal.sdp as RTCSessionDescriptionInit)
+      const peer = this.peers.get(signal.from)
+      if (!peer) return
+      await peer.setRemoteDescription(signal.sdp as RTCSessionDescriptionInit)
+      await this.flushCandidates(signal.from, peer)
       return
     }
     if (signal.type === 'candidate' && typeof signal.from === 'string' && signal.candidate) {
-      await this.peers.get(signal.from)?.addIceCandidate(signal.candidate as RTCIceCandidateInit)
+      const candidate = signal.candidate as RTCIceCandidateInit
+      const peer = this.peers.get(signal.from)
+      if (peer?.remoteDescription) {
+        await peer.addIceCandidate(candidate)
+      } else {
+        this.pendingCandidates.set(signal.from, [...(this.pendingCandidates.get(signal.from) ?? []), candidate])
+      }
     }
+  }
+
+  private async flushCandidates(remoteId: string, peer: RTCPeerConnection) {
+    const candidates = this.pendingCandidates.get(remoteId) ?? []
+    this.pendingCandidates.delete(remoteId)
+    for (const candidate of candidates) await peer.addIceCandidate(candidate)
   }
 
   private createPeer(remoteId: string) {
