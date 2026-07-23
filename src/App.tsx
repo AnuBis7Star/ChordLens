@@ -1,7 +1,7 @@
 import { lazy, type CSSProperties, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { detectChord, simplifyDetectedChord, type SimplifiedChord } from './lib/chords'
 import { notifySimplifiedChordChange } from './lib/chords/simplify'
-import { EMPTY_MIDI_STATE, updateMidiState } from './lib/midi'
+import { EMPTY_MIDI_STATE, transposeMidiNotes, updateMidiState } from './lib/midi'
 import { toNotationNotes } from './lib/notation'
 import { getChordSmoothingDelay } from './lib/smoothing'
 import { LiveRoom, type CreateSignalingConnection, type RoomContext, type RoomMode, type RoomStatus } from './lib/liveRoom'
@@ -39,6 +39,8 @@ type Preferences = {
   followHostKey?: boolean
   shareCurrentSong?: boolean
   followHostSong?: boolean
+  inputTranspose?: number
+  displayTranspose?: number
 }
 
 const DEFAULT_PREFERENCES_KEY = 'chordlens-midi:preferences'
@@ -60,6 +62,8 @@ function loadPreferences(preferencesKey: string): Preferences {
       followHostKey: typeof preferences.followHostKey === 'boolean' ? preferences.followHostKey : undefined,
       shareCurrentSong: typeof preferences.shareCurrentSong === 'boolean' ? preferences.shareCurrentSong : undefined,
       followHostSong: typeof preferences.followHostSong === 'boolean' ? preferences.followHostSong : undefined,
+      inputTranspose: Number.isInteger(preferences.inputTranspose) && Math.abs(preferences.inputTranspose!) <= 11 ? preferences.inputTranspose : undefined,
+      displayTranspose: Number.isInteger(preferences.displayTranspose) && Math.abs(preferences.displayTranspose!) <= 11 ? preferences.displayTranspose : undefined,
     }
   } catch {
     return {}
@@ -118,6 +122,8 @@ export default function App({
   const [role, setRole] = useState<Role>(preferences.role ?? 'pianist')
   const [smoothingEnabled, setSmoothingEnabled] = useState(preferences.smoothingEnabled ?? false)
   const [scoreVisible, setScoreVisible] = useState(preferences.scoreVisible ?? true)
+  const [inputTranspose, setInputTranspose] = useState(preferences.inputTranspose ?? 0)
+  const [displayTranspose, setDisplayTranspose] = useState(preferences.displayTranspose ?? 0)
   const [demoPlaying, setDemoPlaying] = useState(false)
   const [hasPlayed, setHasPlayed] = useState(false)
   const [showReadyPrompt, setShowReadyPrompt] = useState(true)
@@ -175,11 +181,13 @@ export default function App({
         followHostKey,
         shareCurrentSong,
         followHostSong,
+        inputTranspose,
+        displayTranspose,
       }))
     } catch {
       // Browser storage can be disabled; the app remains usable for this session.
     }
-  }, [controlledKeySignature, followHostKey, followHostSong, keySignature, preferences.keySignature, preferencesKey, role, roomCode, roomMode, scoreVisible, selectedInputId, shareCurrentSong, smoothingEnabled])
+  }, [controlledKeySignature, displayTranspose, followHostKey, followHostSong, inputTranspose, keySignature, preferences.keySignature, preferencesKey, role, roomCode, roomMode, scoreVisible, selectedInputId, shareCurrentSong, smoothingEnabled])
 
   useEffect(() => {
     if (roomMode !== 'host') return
@@ -233,7 +241,9 @@ export default function App({
   const selectedInput = inputs.find((input) => input.id === selectedInputId) ?? inputs[0]
   const selectedKeyRoot = KEY_ROOTS.find((key) => key.major === keySignature || key.minor === keySignature) ?? KEY_ROOTS[0]
   const isMinorKey = selectedKeyRoot.minor === keySignature
-  const keyLabel = `${selectedKeyRoot.label} ${isMinorKey ? 'minor' : 'major'}`
+  const displayKeyRoot = KEY_ROOTS[(KEY_ROOTS.indexOf(selectedKeyRoot) + displayTranspose + 12) % 12]
+  const displayKeySignature = isMinorKey ? displayKeyRoot.minor : displayKeyRoot.major
+  const keyLabel = `${displayKeyRoot.label} ${isMinorKey ? 'minor' : 'major'}`
 
   useEffect(() => {
     if (selectedInput && selectedInput.id !== selectedInputId) setSelectedInputId(selectedInput.id)
@@ -254,7 +264,11 @@ export default function App({
     return () => { selectedInput.onmidimessage = null }
   }, [selectedInput])
 
-  const sourceNotes = midiState.soundingNotes
+  const instrumentTranspose = inputTranspose + midiState.automaticTranspose
+  const sourceNotes = useMemo(
+    () => transposeMidiNotes(midiState.soundingNotes, instrumentTranspose),
+    [instrumentTranspose, midiState.soundingNotes],
+  )
   const isListening = sourceNotes.length === 0
   const [analysisNotes, setAnalysisNotes] = useState(sourceNotes)
 
@@ -282,14 +296,18 @@ export default function App({
     return () => window.clearTimeout(timer)
   }, [hasPlayed, isListening])
 
-  const chordNotes = toNotationNotes(analysisNotes, keySignature).map((note) => note.key.replace('/', ''))
+  const displayNotes = useMemo(
+    () => transposeMidiNotes(analysisNotes, displayTranspose),
+    [analysisNotes, displayTranspose],
+  )
+  const chordNotes = toNotationNotes(displayNotes, displayKeySignature).map((note) => note.key.replace('/', ''))
   const result = useMemo(() => {
     try {
       return { detection: detectChord(chordNotes), error: null }
     } catch (error) {
       return { detection: null, error: error instanceof Error ? error.message : 'Could not read these notes' }
     }
-  }, [analysisNotes, keySignature])
+  }, [displayKeySignature, displayNotes])
   const simplifiedChord = simplifyDetectedChord(result.detection?.detectedChord)
 
   useEffect(() => {
@@ -403,6 +421,14 @@ export default function App({
                   </div>
                 </div>
               </div>
+              <label className="transpose-control">
+                <span>Manual instrument transpose<small>Auto MIDI transpose: {midiState.automaticTranspose > 0 ? '+' : ''}{midiState.automaticTranspose}</small></span>
+                <input aria-label="Instrument transpose in semitones" type="number" min={-11} max={11} value={inputTranspose} onChange={(event) => setInputTranspose(Math.max(-11, Math.min(11, Number(event.target.value) || 0)))} />
+              </label>
+              <label className="transpose-control">
+                <span>Display transpose<small>Changes the chords and score shown in the app.</small></span>
+                <input aria-label="Display transpose in semitones" type="number" min={-11} max={11} value={displayTranspose} onChange={(event) => setDisplayTranspose(Math.max(-11, Math.min(11, Number(event.target.value) || 0)))} />
+              </label>
               <label className="toggle-control" htmlFor="score-visible">
                 <span>Score display<small>{scoreVisible ? 'Shown in all views' : 'Hidden in all views'}</small></span>
                 <input id="score-visible" type="checkbox" checked={scoreVisible} onChange={(event) => setScoreVisible(event.target.checked)} />
@@ -466,7 +492,7 @@ export default function App({
 
         {scoreVisible && <section className="notation-panel" aria-label={`Score in ${keyLabel}`}>
           <Suspense fallback={<div className="grand-staff" />}>
-            <GrandStaff notes={sourceNotes} keySignature={keySignature} />
+            <GrandStaff notes={displayNotes} keySignature={displayKeySignature} />
           </Suspense>
         </section>}
       </section>
