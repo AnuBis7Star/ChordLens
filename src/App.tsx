@@ -1,11 +1,13 @@
 import { lazy, type CSSProperties, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { detectChord } from './lib/chords'
+import { detectChord, simplifyDetectedChord, type SimplifiedChord } from './lib/chords'
+import { notifySimplifiedChordChange } from './lib/chords/simplify'
 import { EMPTY_MIDI_STATE, updateMidiState } from './lib/midi'
 import { toNotationNotes } from './lib/notation'
 import { getChordSmoothingDelay } from './lib/smoothing'
 import { LiveRoom, type CreateSignalingConnection, type RoomContext, type RoomMode, type RoomStatus } from './lib/liveRoom'
 
 export type { CreateSignalingConnection, RoomContext, Signal, SignalingConnection } from './lib/liveRoom'
+export type { SimplifiedChord } from './lib/chords'
 
 const ROLES = ['pianist', 'guitarist', 'bassist'] as const
 const KEY_ROOTS = [
@@ -85,6 +87,7 @@ type ChordLensBaseProps = {
   createSignalingConnection?: CreateSignalingConnection
   activeSongId?: string | null
   onActiveSongIdChange?: (songId: string) => void
+  onSimplifiedChordChange?: (chord: SimplifiedChord | null) => void
 }
 
 export type ChordLensProps = ChordLensBaseProps & (
@@ -102,6 +105,7 @@ export default function App({
   onKeySignatureChange,
   activeSongId,
   onActiveSongIdChange,
+  onSimplifiedChordChange,
 }: ChordLensProps) {
   const [preferences] = useState(() => loadPreferences(preferencesKey))
   const [midiAccess, setMidiAccess] = useState<MIDIAccess | null>(null)
@@ -128,6 +132,7 @@ export default function App({
   const setupRef = useRef<HTMLDetailsElement>(null)
   const roomRef = useRef<LiveRoom | null>(null)
   const midiStateRef = useRef(EMPTY_MIDI_STATE)
+  const simplifiedChordRef = useRef<SimplifiedChord | null | undefined>(undefined)
   const contextRef = useRef({ keySignature, activeSongId, followHostKey, shareCurrentSong, followHostSong, onKeySignatureChange, onActiveSongIdChange })
 
   contextRef.current = { keySignature, activeSongId, followHostKey, shareCurrentSong, followHostSong, onKeySignatureChange, onActiveSongIdChange }
@@ -285,6 +290,11 @@ export default function App({
       return { detection: null, error: error instanceof Error ? error.message : 'Could not read these notes' }
     }
   }, [analysisNotes, keySignature])
+  const simplifiedChord = simplifyDetectedChord(result.detection?.detectedChord)
+
+  useEffect(() => {
+    simplifiedChordRef.current = notifySimplifiedChordChange(simplifiedChordRef.current, simplifiedChord, onSimplifiedChordChange)
+  }, [onSimplifiedChordChange, simplifiedChord])
 
   const activeView = result.detection?.views[role]
   const deviceName = selectedInput?.name ?? 'No MIDI device'
