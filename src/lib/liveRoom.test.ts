@@ -12,6 +12,42 @@ function bindFakeChannel(room: LiveRoom) {
 }
 
 describe('LiveRoom signaling transport', () => {
+  it('waits for the remote description before adding ICE candidates', async () => {
+    const addIceCandidate = vi.fn()
+    class FakePeerConnection {
+      remoteDescription: RTCSessionDescription | null = null
+      onicecandidate: RTCPeerConnection['onicecandidate'] = null
+      ondatachannel: RTCPeerConnection['ondatachannel'] = null
+      close = vi.fn()
+      addIceCandidate = addIceCandidate
+      setRemoteDescription = vi.fn(async (description: RTCSessionDescriptionInit) => {
+        this.remoteDescription = description as RTCSessionDescription
+      })
+    }
+    vi.stubGlobal('RTCPeerConnection', FakePeerConnection)
+    const room = new LiveRoom({
+      onMidi: vi.fn(),
+      onState: vi.fn(),
+      onStatus: vi.fn(),
+      onPeerConnected: vi.fn(),
+    })
+    const internals = room as unknown as {
+      createPeer: (remoteId: string) => RTCPeerConnection
+      handleSignal: (signal: { type: string; [key: string]: unknown }) => Promise<void>
+    }
+
+    try {
+      internals.createPeer('viewer-1')
+      await internals.handleSignal({ type: 'candidate', from: 'viewer-1', candidate: { candidate: 'candidate-1' } })
+      expect(addIceCandidate).not.toHaveBeenCalled()
+
+      await internals.handleSignal({ type: 'answer', from: 'viewer-1', sdp: { type: 'answer', sdp: 'answer-sdp' } })
+      expect(addIceCandidate).toHaveBeenCalledWith({ candidate: 'candidate-1' })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('uses a host-provided signaling connection', async () => {
     const statuses: string[] = []
     const close = vi.fn()
