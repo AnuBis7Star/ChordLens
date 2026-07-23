@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EMPTY_MIDI_STATE, updateMidiState } from './midi'
+import { EMPTY_MIDI_STATE, transposeMidiNotes, updateMidiState } from './midi'
 
 describe('updateMidiState', () => {
   it('keeps released notes sounding until the sustain pedal is released', () => {
@@ -7,7 +7,7 @@ describe('updateMidiState', () => {
     state = updateMidiState(state, [0xb0, 64, 127])
     state = updateMidiState(state, [0x80, 60, 0])
 
-    expect(state).toEqual({ pressedNotes: [], soundingNotes: [60], sustain: true })
+    expect(state).toMatchObject({ pressedNotes: [], soundingNotes: [60], sustain: true })
 
     state = updateMidiState(state, [0xb0, 64, 0])
     expect(state).toEqual(EMPTY_MIDI_STATE)
@@ -20,6 +20,20 @@ describe('updateMidiState', () => {
     state = updateMidiState(state, [0x80, 60, 0])
     state = updateMidiState(state, [0xb0, 64, 0])
 
-    expect(state).toEqual({ pressedNotes: [64], soundingNotes: [64], sustain: false })
+    expect(state).toMatchObject({ pressedNotes: [64], soundingNotes: [64], sustain: false })
+  })
+
+  it('reads channel coarse tuning sent as an RPN', () => {
+    let state = updateMidiState(EMPTY_MIDI_STATE, [0xb0, 101, 0])
+    state = updateMidiState(state, [0xb0, 100, 2])
+    state = updateMidiState(state, [0xb0, 6, 63])
+
+    expect(state.automaticTranspose).toBe(-1)
+  })
+})
+
+describe('transposeMidiNotes', () => {
+  it('moves notes by semitones and excludes pitches outside MIDI range', () => {
+    expect(transposeMidiNotes([0, 60, 127], -1)).toEqual([59, 126])
   })
 })
